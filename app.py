@@ -38,7 +38,8 @@ def fetch_news():
     url = "https://newsapi.org/v2/top-headlines"
     params = {
         "country": "us",
-        "apiKey": st.secrets["NEWS_API_KEY"],  # Store API key in Streamlit secrets
+        "apiKey": "pub_0b73cdbc05a94fcfb88347ff453aaf45",
+ # Store API key in Streamlit secrets
         "pageSize": 10
     }
     response = requests.get(url, params=params)
