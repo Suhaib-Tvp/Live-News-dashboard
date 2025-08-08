@@ -1,0 +1,5 @@
+streamlit
+pyspark
+requests
+beautifulsoup4
+textblob
