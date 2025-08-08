@@ -1,66 +1,81 @@
-📰 Live News Dashboard
-A real-time news dashboard built with Streamlit and PySpark that pulls headlines from:
+# 📰 Live News Dashboard
 
-Newsdata.io API
+A real-time news dashboard built with **Streamlit** and **PySpark** that pulls headlines from:
 
-The Indian Express (web scraping)
+- **Newsdata.io API**
+- **The Indian Express** (web scraping)
 
 The dashboard:
+- Updates every **30 seconds**
+- Shows **Sentiment Score** and **Sentiment Label**
+- Detects **Topic** (Politics, Health, Business, etc.)
+- Includes clickable links to the full news articles
 
-Updates every 30 seconds
+---
 
-Shows Sentiment Score and Sentiment Label
+## 🚀 Features
 
-Detects Topic (Politics, Health, Business, etc.)
+- **Live Updates**: Refreshes automatically every 30 seconds  
+- **Multiple Sources**: Combines API and web scraping  
+- **Sentiment Analysis**: Positive, Negative, Neutral scoring with `TextBlob`  
+- **Topic Detection**: Keyword-based classification  
+- **PySpark + Pandas**: Handles and displays data efficiently  
+- **Streamlit UI**: Interactive and easy to use  
 
-Includes clickable links to the full news articles
+---
 
-🚀 Features
-Live Updates: Refreshes automatically every 30 seconds.
+## 📦 Requirements
 
-Multiple Sources: Combines API and web scraping.
+Create a file called `requirements.txt` with the following:
 
-Sentiment Analysis: Positive, Negative, Neutral scoring with TextBlob.
-
-Topic Detection: Keyword-based classification.
-
-PySpark + Pandas: Handles and displays data efficiently.
-
-Streamlit UI: Interactive and easy to use.
-
-📦 Requirements
-Create a file requirements.txt with:
-
+```
 streamlit
 pyspark
 requests
 beautifulsoup4
 textblob
+```
 
 Install dependencies:
 
+```bash
 pip install -r requirements.txt
+```
 
-🛠 How It Works
-Fetch Newsdata.io API → Retrieves top headlines in English.
+---
 
-Scrape The Indian Express → Grabs latest news headlines.
+## 🛠 How It Works
 
-Analyze Sentiment → Uses TextBlob polarity.
+1. **Fetch Newsdata.io API** → Retrieves top headlines in English  
+2. **Scrape The Indian Express** → Grabs latest news headlines  
+3. **Analyze Sentiment** → Uses `TextBlob` polarity  
+4. **Detect Topic** → Keyword matching  
+5. **Display in Streamlit** → DataFrame view, auto-refresh  
 
-Detect Topic → Keyword matching.
+---
 
-Display in Streamlit → DataFrame view, auto-refresh.
+## ▶️ Run the App
 
-⚠️ Notes
-Frequent API calls may hit rate limits on free plan.
+```bash
+streamlit run app.py
+```
 
-If API is down, only scraped headlines will appear.
+This will open the dashboard in your browser at:
 
-For deployment, consider hiding API key using Streamlit Secrets.
+```
+http://localhost:8501
+```
 
-📜 License
+---
+
+## ⚠️ Notes
+
+- Frequent API calls may hit **rate limits** on the free plan  
+- If the API is down, only scraped headlines will appear  
+- For deployment, keep your API key safe using **Streamlit Secrets**  
+
+---
+
+## 📜 License
+
 MIT License — feel free to modify and share.
-
-Copy
-Edit
