@@ -85,14 +85,25 @@ def fetch_news():
 # UI
 # ----------------------------
 st.title("📰 Live News Dashboard")
-st.caption("Auto-refresh removed for stability — click 'Refresh News' below to get latest headlines.")
+st.caption("Auto-updates every 30 seconds with sentiment analysis")
 
-if st.button("🔄 Refresh News"):
-    st.experimental_rerun()
+# Inject JavaScript for auto-refresh every 30 seconds
+st.markdown(
+    """
+    <script>
+    setTimeout(function(){
+        window.location.reload(1);
+    }, 30000);
+    </script>
+    """,
+    unsafe_allow_html=True
+)
 
+# Fetch latest news
 news_df = fetch_news()
 
 if news_df.empty:
     st.info("No news available right now.")
 else:
     st.dataframe(news_df, use_container_width=True)
+
