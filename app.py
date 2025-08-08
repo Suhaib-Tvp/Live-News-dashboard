@@ -1,36 +1,24 @@
-import os
-import time
-import requests
-import pandas as pd
 import streamlit as st
-from textblob import TextBlob
+import pandas as pd
+import requests
 from bs4 import BeautifulSoup
+from textblob import TextBlob
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import udf
-from pyspark.sql.types import FloatType, StringType
+from pyspark.sql.types import StringType, FloatType
 
-# -------------------- CONFIGURE JAVA FOR STREAMLIT CLOUD --------------------
-os.environ["JAVA_HOME"] = "/usr/lib/jvm/java-17-openjdk-amd64"
-
-# -------------------- STREAMLIT PAGE SETTINGS --------------------
-st.set_page_config(page_title="📰 Live News Dashboard", layout="wide")
-st.title("📰 Live News Dashboard")
-st.caption("Auto-updates every 30 seconds with sentiment analysis and topic detection")
-
-# -------------------- API KEY HANDLING --------------------
-try:
-    NEWS_API_KEY = st.secrets["NEWS_API_KEY"]
-except KeyError:
-    NEWS_API_KEY = "pub_0b73cdbc05a94fcfb88347ff453aaf45"  # fallback for local dev
-
-# -------------------- START SPARK SESSION --------------------
+# ---------------------------
+# Spark Session
+# ---------------------------
 spark = SparkSession.builder.appName("LiveNewsDashboard").getOrCreate()
 
-# -------------------- UDFS FOR SENTIMENT --------------------
+# ---------------------------
+# Sentiment Functions
+# ---------------------------
 def get_sentiment_score(text):
     if not text:
         return 0.0
-    return TextBlob(text).sentiment.polarity
+    return round(TextBlob(text).sentiment.polarity, 3)
 
 def get_sentiment_label(score):
     if score > 0:
@@ -40,114 +28,123 @@ def get_sentiment_label(score):
     else:
         return "Neutral"
 
-sentiment_udf = udf(get_sentiment_score, FloatType())
-label_udf = udf(get_sentiment_label, StringType())
-
-# -------------------- TOPIC DETECTION --------------------
 def detect_topic(text):
     if not text:
-        return "Other"
-    text = text.lower()
-    if any(word in text for word in ["politics", "government", "election"]):
+        return "General"
+    t = text.lower()
+    if any(word in t for word in ["election", "government", "minister", "politics"]):
         return "Politics"
-    elif any(word in text for word in ["health", "covid", "vaccine", "disease"]):
+    elif any(word in t for word in ["covid", "health", "vaccine", "disease"]):
         return "Health"
-    elif any(word in text for word in ["business", "market", "economy", "stock"]):
+    elif any(word in t for word in ["stock", "market", "economy", "business"]):
         return "Business"
-    elif any(word in text for word in ["sports", "cricket", "football", "tournament"]):
+    elif any(word in t for word in ["cricket", "football", "tennis", "sports"]):
         return "Sports"
     else:
-        return "Other"
+        return "General"
 
+# ---------------------------
+# Register Spark UDFs
+# ---------------------------
+sentiment_udf = udf(get_sentiment_score, FloatType())
+label_udf = udf(get_sentiment_label, StringType())
 topic_udf = udf(detect_topic, StringType())
 
-# -------------------- FETCH FROM NEWSDATA.IO --------------------
+# ---------------------------
+# Fetch Newsdata.io API
+# ---------------------------
 def fetch_newsdata_api():
     url = "https://newsdata.io/api/1/news"
     params = {
-        "apikey": NEWS_API_KEY,
+        "apikey": st.secrets.get("NEWS_API_KEY", "pub_0b73cdbc05a94fcfb88347ff453aaf45"),
         "language": "en",
         "category": "top"
     }
     try:
-        response = requests.get(url, params=params, timeout=10)
-        if response.status_code != 200:
-            st.warning(f"Newsdata.io API Error: {response.status_code}")
-            return pd.DataFrame(columns=["title", "source", "link", "about"])
-        
-        articles = response.json().get("results", [])
-        if not articles:
-            return pd.DataFrame(columns=["title", "source", "link", "about"])
-        
-        return pd.DataFrame([{
-            "title": art.get("title", ""),
-            "source": art.get("source_id", "Unknown"),
-            "link": art.get("link", ""),
-            "about": art.get("description", "")
-        } for art in articles])
+        r = requests.get(url, params=params, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        articles = []
+        for item in data.get("results", []):
+            articles.append({
+                "title": item.get("title", ""),
+                "source": item.get("source_id", "Newsdata.io"),
+                "link": item.get("link", ""),
+                "about": item.get("description", "")
+            })
+        return pd.DataFrame(articles)
     except Exception as e:
-        st.warning(f"Error fetching Newsdata.io: {e}")
+        st.error(f"Error fetching Newsdata.io: {e}")
         return pd.DataFrame(columns=["title", "source", "link", "about"])
 
-# -------------------- SCRAPE THE INDIAN EXPRESS --------------------
+# ---------------------------
+# Scrape The Indian Express
+# ---------------------------
 def scrape_indian_express():
-    url = "https://indianexpress.com/"
+    url = "https://indianexpress.com/latest-news/"
     try:
         r = requests.get(url, timeout=10)
-        if r.status_code != 200:
-            st.warning("Indian Express scraping failed")
-            return pd.DataFrame(columns=["title", "source", "link", "about"])
-        
         soup = BeautifulSoup(r.text, "html.parser")
-        headlines = soup.find_all("h2", class_="title")
-        if not headlines:
-            return pd.DataFrame(columns=["title", "source", "link", "about"])
-        
-        data = []
-        for h in headlines:
-            a_tag = h.find("a")
-            if a_tag:
-                title = a_tag.text.strip()
-                link = a_tag["href"]
-                data.append({
-                    "title": title,
-                    "source": "The Indian Express",
-                    "link": link,
+        headlines = []
+        for item in soup.select("div.title"):
+            a = item.find("a")
+            if a:
+                headlines.append({
+                    "title": a.get_text(strip=True),
+                    "source": "Indian Express",
+                    "link": a.get("href", ""),
                     "about": ""
                 })
-        return pd.DataFrame(data)
+        return pd.DataFrame(headlines)
     except Exception as e:
-        st.warning(f"Error scraping Indian Express: {e}")
+        st.error(f"Error scraping Indian Express: {e}")
         return pd.DataFrame(columns=["title", "source", "link", "about"])
 
-# -------------------- FETCH + PROCESS ALL NEWS --------------------
+# ---------------------------
+# Combine, Process & Return
+# ---------------------------
 def fetch_news():
-    df_api = fetch_newsdata_api()
-    df_scrape = scrape_indian_express()
+    columns = ["title", "source", "link", "about"]
 
-    df = pd.concat([df_api, df_scrape], ignore_index=True).drop_duplicates(subset=["title"])
+    df_api = fetch_newsdata_api()[columns]
+    df_scrape = scrape_indian_express()[columns]
+
+    df = pd.concat([df_api, df_scrape], ignore_index=True)
+    df.dropna(subset=["title"], inplace=True)
+    df.fillna("", inplace=True)
+    df = df.drop_duplicates(subset=["title"])
+
     if df.empty:
         return pd.DataFrame(columns=["title", "source", "sentiment_score", "sentiment_label", "topic", "link", "about"])
 
-    # Convert to Spark DataFrame
-    sdf = spark.createDataFrame(df)
+    try:
+        sdf = spark.createDataFrame(df)
+    except Exception as e:
+        st.error(f"Spark DataFrame creation failed: {e}")
+        return pd.DataFrame(columns=["title", "source", "sentiment_score", "sentiment_label", "topic", "link", "about"])
 
-    # Sentiment + Topic Detection
     sdf = sdf.withColumn("sentiment_score", sentiment_udf(sdf["title"]))
     sdf = sdf.withColumn("sentiment_label", label_udf(sdf["sentiment_score"]))
     sdf = sdf.withColumn("topic", topic_udf(sdf["title"]))
 
-    # Convert back to Pandas
     pdf = sdf.toPandas()
     return pdf[["title", "source", "sentiment_score", "sentiment_label", "topic", "link", "about"]]
 
-# -------------------- STREAMLIT LIVE UPDATE --------------------
-placeholder = st.empty()
+# ---------------------------
+# Streamlit App
+# ---------------------------
+st.set_page_config(page_title="Live News Dashboard", layout="wide")
+st.title("📰 Live News Dashboard")
+st.caption("Auto-updates every 30 seconds with sentiment analysis")
 
-while True:
-    news_df = fetch_news()
-    if news_df.empty:
-        placeholder.warning("No news available right now.")
-    else:
-        placeholder.dataframe(news_df, use_container_width=True)
-    time.sleep(30)
+# Auto-refresh every 30 sec
+st_autorefresh = st.experimental_rerun  # handled by user refresh; or we could use streamlit_autorefresh package
+
+news_df = fetch_news()
+
+if not news_df.empty:
+    # Make link clickable
+    news_df["link"] = news_df["link"].apply(lambda x: f"[Read more]({x})" if x else "")
+    st.dataframe(news_df, use_container_width=True)
+else:
+    st.warning("No news available at the moment.")
