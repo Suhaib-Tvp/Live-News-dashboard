@@ -4,7 +4,6 @@ from bs4 import BeautifulSoup
 from textblob import TextBlob
 import pandas as pd
 from pyspark.sql import SparkSession
-from streamlit_autorefresh import st_autorefresh
 
 # Initialize PySpark
 spark = SparkSession.builder.appName("LiveNewsDashboard").getOrCreate()
@@ -13,8 +12,14 @@ st.set_page_config(page_title="📰 Live News Dashboard", layout="wide")
 st.title("📰 Live News Dashboard")
 st.caption("Auto-updates every 30 seconds with sentiment analysis")
 
-# Refresh every 30 seconds
-st_autorefresh(interval=30 * 1000, key="newsrefresh")
+# Built-in autorefresh (no external package)
+st.experimental_rerun  # available for manual reruns
+st_autorefresh = st.experimental_rerun  # alias if needed
+
+# Auto-refresh every 30 seconds without while-loop
+if st.session_state.get("last_refresh", 0) + 30 < pd.Timestamp.now().timestamp():
+    st.session_state.last_refresh = pd.Timestamp.now().timestamp()
+    st.experimental_rerun()
 
 # Sentiment analysis
 def analyze_sentiment(text):
@@ -52,7 +57,7 @@ def fetch_newsdata_io():
     try:
         url = "https://newsdata.io/api/1/news"
         params = {
-            "apikey": st.secrets["NEWS_API_KEY"],
+            "apikey": st.secrets.get("NEWS_API_KEY", ""),
             "language": "en",
             "category": "top"
         }
