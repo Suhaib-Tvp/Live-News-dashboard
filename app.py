@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from textblob import TextBlob
 import pandas as pd
 from pyspark.sql import SparkSession
-import time
+from streamlit_autorefresh import st_autorefresh
 
 # Initialize PySpark
 spark = SparkSession.builder.appName("LiveNewsDashboard").getOrCreate()
@@ -13,12 +13,14 @@ st.set_page_config(page_title="📰 Live News Dashboard", layout="wide")
 st.title("📰 Live News Dashboard")
 st.caption("Auto-updates every 30 seconds with sentiment analysis")
 
-# Function to get sentiment
+# Refresh every 30 seconds
+st_autorefresh(interval=30 * 1000, key="newsrefresh")
+
+# Sentiment analysis
 def analyze_sentiment(text):
     if not text or not isinstance(text, str):
         return 0.0, "Neutral"
-    blob = TextBlob(text)
-    score = blob.sentiment.polarity
+    score = TextBlob(text).sentiment.polarity
     if score > 0:
         label = "Positive"
     elif score < 0:
@@ -27,7 +29,7 @@ def analyze_sentiment(text):
         label = "Neutral"
     return score, label
 
-# Function to detect topic (simple keyword matching)
+# Topic detection
 def detect_topic(text):
     if not text:
         return "Unknown"
@@ -45,19 +47,18 @@ def detect_topic(text):
     else:
         return "General"
 
-# Fetch from Newsdata.io API
+# Newsdata.io API
 def fetch_newsdata_io():
     try:
         url = "https://newsdata.io/api/1/news"
         params = {
-            "apikey": st.secrets["NEWS_API_KEY"],  # stored in Streamlit secrets
+            "apikey": st.secrets["NEWS_API_KEY"],
             "language": "en",
             "category": "top"
         }
         resp = requests.get(url, params=params, timeout=10)
         resp.raise_for_status()
-        data = resp.json()
-        articles = data.get("results", [])
+        articles = resp.json().get("results", [])
         news_list = []
         for a in articles:
             score, label = analyze_sentiment(a.get("title"))
@@ -75,7 +76,7 @@ def fetch_newsdata_io():
         st.error(f"Error fetching Newsdata.io: {e}")
         return []
 
-# Scrape The Indian Express
+# Indian Express scraper
 def scrape_indian_express():
     try:
         url = "https://indianexpress.com/"
@@ -103,23 +104,17 @@ def scrape_indian_express():
         st.error(f"Error scraping Indian Express: {e}")
         return []
 
-# Combined fetch
+# Fetch and display news
 def fetch_news():
     all_news = fetch_newsdata_io() + scrape_indian_express()
-    if not all_news:  # safeguard for empty data
-        st.warning("No news data available right now.")
+    if not all_news:
         return pd.DataFrame(columns=["title", "source", "sentiment_score", "sentiment_label", "topic", "link"])
-    df = pd.DataFrame(all_news)
-    return df
+    return pd.DataFrame(all_news)
 
-# Main app loop
-while True:
-    news_df = fetch_news()
+news_df = fetch_news()
 
-    if not news_df.empty:
-        sdf = spark.createDataFrame(news_df)  # safe because df not empty
-        st.dataframe(news_df[["title", "source", "sentiment_score", "sentiment_label", "topic", "link"]])
-    else:
-        st.write("No news to display.")
-
-    time.sleep(30)  # refresh every 30 seconds
+if not news_df.empty:
+    sdf = spark.createDataFrame(news_df)
+    st.dataframe(news_df[["title", "source", "sentiment_score", "sentiment_label", "topic", "link"]])
+else:
+    st.warning("No news available at the moment.")
