@@ -114,21 +114,23 @@ def fetch_news():
     df.fillna("", inplace=True)
     df = df.drop_duplicates(subset=["title"])
 
+    # ✅ FIX — if no data, skip Spark entirely
     if df.empty:
-        return pd.DataFrame(columns=["title", "source", "sentiment_score", "sentiment_label", "topic", "link", "about"])
+        st.warning("No news articles found. Please try again later.")
+        return pd.DataFrame(columns=[
+            "title", "source", "sentiment_score",
+            "sentiment_label", "topic", "link", "about"
+        ])
 
-    try:
-        sdf = spark.createDataFrame(df)
-    except Exception as e:
-        st.error(f"Spark DataFrame creation failed: {e}")
-        return pd.DataFrame(columns=["title", "source", "sentiment_score", "sentiment_label", "topic", "link", "about"])
-
+    # Now safe to create Spark DataFrame
+    sdf = spark.createDataFrame(df)
     sdf = sdf.withColumn("sentiment_score", sentiment_udf(sdf["title"]))
     sdf = sdf.withColumn("sentiment_label", label_udf(sdf["sentiment_score"]))
     sdf = sdf.withColumn("topic", topic_udf(sdf["title"]))
 
     pdf = sdf.toPandas()
     return pdf[["title", "source", "sentiment_score", "sentiment_label", "topic", "link", "about"]]
+
 
 # ---------------------------
 # Streamlit App
